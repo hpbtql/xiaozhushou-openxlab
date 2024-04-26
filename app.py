@@ -1,23 +1,28 @@
-import gradio as gr
 import os
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModel
-from openxlab.model import download
+import gradio as gr
+from lmdeploy import pipeline, TurbomindEngineConfig,GenerationConfig
+backend_config = TurbomindEngineConfig(cache_max_entry_count=0.01,model_format="awq")
 
-base_path = './xiaozhushou'
+# download internlm2 to the base_path directory using git tool
+base_path = './internlm2-chat-1_8b-4bit'
 os.system(f'git clone https://code.openxlab.org.cn/hpbtql/xiaozhushou.git {base_path}')
 os.system(f'cd {base_path} && git lfs pull')
 
-tokenizer = AutoTokenizer.from_pretrained(base_path,trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(base_path,trust_remote_code=True, torch_dtype=torch.float16)
-
+pipe = pipeline(base_path,
+                backend_config=backend_config)
+gen_config = GenerationConfig(top_p=0.8,
+                              top_k=40,
+                              temperature=0.8,
+                              max_new_tokens=1024)
+       
 def chat(message,history):
-    for response,history in model.stream_chat(tokenizer,message,history,max_length=2048,top_p=0.7,temperature=1):
-        yield response
+    response = pipe(message,
+                    gen_config = gen_config)
+    return response.text
 
-gr.ChatInterface(chat,
-                 title="hpbtql的小助手",
-                description="""
-这是经过hpbtqlFinetune以后的小助手 
-                 """,
-                 ).queue(1).launch()
+demo = gr.ChatInterface(
+            fn = chat,
+            title="InternLM2-Chat-1.8_4bit-self-cognition",
+            description="""InternLM is mainly developed by Shanghai AI Laboratory.  """,
+            )
+demo.queue(1).launch()
